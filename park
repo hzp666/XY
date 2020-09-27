@@ -1,0 +1,130 @@
+概述
+祥源私有云未部署数据中台，部分指标旧版采集没有，所以需要提供基于分表的统计SQL，旧版已有的采集指标，按旧版采集表提供统计数据。
+序
+一级指标
+二级指标
+取值说明
+三级指标/明细层
+38
+智慧通行（车）
+异常抬杆次数
+截止昨日，按年每月异常抬杆次数、及累计数，以报表形式呈现。
+按项目/按年月呈现
+车位数
+按项目呈现车位数，以报表形式呈现
+39
+临时车平均停车时长分析
+按项目呈现平均临停时长，以曲线图呈现
+按项目呈现
+40
+今日车行流量（进出次数）
+按项目排名呈现今日车行进出次数，反映车流量。
+按项目呈现
+41
+今日通行车辆数
+按项目排名呈现今日车行车辆次数，与进出次数可反映车流量。
+按项目呈现
+任务详述
+异常抬杆次数
+异常抬杆数据在采集表：toStatParkInfo 中有采集，可以按项目/时间 统计
+按项目统计
+-- 例如 车场8000666 在9月份的异常抬杆数据可以用以下SQL统计
+SELECT b.parkID,b.parkName,d.orgName,count(DISTINCT a.ParkID) projectNum,
+                         SUM(a.remoteExceptionNum + a.manualExceptionNum) exceptionNum,
+             SUM(a.remoteExceptionNum) remotenum,
+             SUM(a.manualExceptionNum) manualnum  
+FROM toStatParkInfo a 
+INNER JOIN tcPark b ON b.parkID = a.parkID AND b.DeleteFlag = 0 
+LEFT JOIN tcusergrouporganization c ON c.parkID = a.parkID and c.deleteFlag = 0 
+LEFT JOIN tcusergrouporganization d ON d.orgID = c.seniorID and d.deleteFlag = 0  
+ WHERE a.parkID IN (8000666) 
+ AND a.parkstatdate >= '20200901' AND a.parkstatdate <= '20200930' GROUP BY 1,2,3 ;
+统计样例：
+按年统计
+-- 例如 车场8000666，在2020年的异常抬杆数据可以用以下SQL统计
+SELECT SUBSTRING(a.parkstatdate, 1, 4) statTime,count(DISTINCT a.ParkID) projectNum,
+SUM(a.remoteExceptionNum+a.manualExceptionNum)exceptionNum,
+SUM(a.remoteExceptionNum) remotenum,
+SUM(a.manualExceptionNum) manualnum  from toStatParkInfo a
+WHERE a.parkID IN (8000666) AND a.parkstatdate >= '20200101' AND a.parkstatdate <= '20201231' GROUP BY 1;
+统计样例：
+按月统计
+SELECT CONCAT(SUBSTRING(a.parkstatdate, 1, 4),'-',SUBSTRING(a.parkstatdate, 5, 2)) statTime,count(DISTINCT a.ParkID) projectNum,
+SUM(a.remoteExceptionNum+a.manualExceptionNum)exceptionNum,
+SUM(a.remoteExceptionNum) remotenum,
+SUM(a.manualExceptionNum) manualnum  from toStatParkInfo a
+WHERE a.parkID IN (8000666) AND a.parkstatdate >= '20200101' AND a.parkstatdate <= '20201231' GROUP BY 1;
+统计样例：
+车位数
+车位数有按天采集到 tostatparkbasicinfo 表中
+-- 例如可以根据以下SQL统计车场 8000666、1332 在9月份的车位数据
+SELECT h1.parkName,h2.statTime,h2.totalSpaceCount,h2.freeSpaceCount FROM tcpark h1 
+LEFT JOIN (SELECT t.statTime,t.parkId,t.totalSpaceCount,t.freeSpaceCount FROM tostatparkbasicinfo t 
+    INNER JOIN (SELECT t2.parkId,MAX(t2.statTime) as mDate FROM tostatparkbasicinfo t2 where t2.statTime >= 20200901 and t2.statTime <= 20200930 GROUP BY t2.parkID) t3
+on t.parkID = t3.parkId and t.statTime = t3.mDate) h2
+ON h2.parkId = h1.parkID where h1.ParkID in(8000666,1332);
+统计样例：
+临时车平均停车时长
+临时车平均停车时长可以在分表 #{parkID}_tosession 中查询
+分表中有记录 
+开始时间: sessionstarttime 
+结束时间: sessionendtime 
+车辆离场： inStock=1 
+临停车标识 ：carbusinesstype = 'TEMP'
+所以从分表中按季度、月、年 三个维度分别统计停车时长可以用如下SQL
+按季度统计停车时长
+-- 以车场8000666 为例 从8000666_tosession分表中统计每季度的停车总时长/每季度的停车总记录数 得到每季度的平均停车时长
+select a.statTime 季度,ROUND(a.parkingDuration/b.num/60,2) `平均停车时长(小时)`
+FROM (
+select QUARTER(createTime) statTime, sum(if(sessionstarttime is null or sessionendtime is null ,0, TIMESTAMPDIFF(MINUTE,sessionstarttime, sessionendtime )))as parkingDuration
+FROM 8000666_tosession where sessionendtime>= '2020-01-01 00:00:00' and sessionendtime< '2020-12-31 23:59:59' and inStock=1 and carbusinesstype = 'TEMP' GROUP BY statTime) a,
+(select count(1) num,QUARTER(createTime) statTime 
+FROM 8000666_tosession where sessionendtime>= '2020-01-01 00:00:00' and sessionendtime< '2020-12-31 23:59:59' and inStock=1 and carbusinesstype = 'TEMP' GROUP BY statTime) b
+GROUP BY a.statTime;
+样例输出
+按月统计平均停车时长
+select a.statTime 月,ROUND(a.parkingDuration/b.num/60,2) `平均停车时长(小时)`
+FROM (
+select MONTH(createTime) statTime, sum(if(sessionstarttime is null or sessionendtime is null ,0, TIMESTAMPDIFF(MINUTE,sessionstarttime, sessionendtime )))as parkingDuration
+FROM 8000666_tosession where sessionendtime>= '2020-01-01 00:00:00' and sessionendtime< '2020-12-31 23:59:59' and inStock=1 and carbusinesstype = 'TEMP' GROUP BY statTime) a,
+(select count(1) num,MONTH(createTime) statTime 
+FROM 8000666_tosession where sessionendtime>= '2020-01-01 00:00:00' and sessionendtime< '2020-12-31 23:59:59' and inStock=1 and carbusinesstype = 'TEMP' GROUP BY statTime) b
+GROUP BY a.statTime;
+样例输出
+按年统计平均停车时长
+select a.statTime 年,ROUND(a.parkingDuration/b.num/60,2) `平均停车时长(小时)`
+FROM (
+select YEAR(createTime) statTime, sum(if(sessionstarttime is null or sessionendtime is null ,0, TIMESTAMPDIFF(MINUTE,sessionstarttime, sessionendtime )))as parkingDuration
+FROM 8000666_tosession where sessionendtime>= '2020-01-01 00:00:00' and sessionendtime< '2020-12-31 23:59:59' and inStock=1 and carbusinesstype = 'TEMP' GROUP BY statTime) a,
+(select count(1) num,YEAR(createTime) statTime 
+FROM 8000666_tosession where sessionendtime>= '2020-01-01 00:00:00' and sessionendtime< '2020-12-31 23:59:59' and inStock=1 and carbusinesstype = 'TEMP' GROUP BY statTime) b
+GROUP BY a.statTime;
+样例输出
+今日车行流量
+车行流量可以从 #{parkID}_toRecord 中获取，该分表记录了车辆通行记录
+注意：如果只要进出口车流量，不考虑内部进出口车流量 要加上 
+devicetype in(0,1) 过滤条件 0-入口  1-出口 2-内部入口 3-内部出口 4场外通道
+以车场 8000666 2020年4月1日 为例获取当日车流量
+select count(1) 总车流量,DATE_FORMAT(recordTime,'%Y-%m-%d') statDate 
+from 8000666_torecord 
+where recordTime >= '2020-04-01 00:00:00' and recordtime <= '2020-04-01 23:59:59' and letgoflag = 1;
+样例输出：
+当然也可以直接按天统计
+select count(1) 进出车流量 ,DATE_FORMAT(recordTime,'%Y-%m-%d') statDate 
+from 8000666_torecord 
+where  letgoflag = 1 
+GROUP BY statDate;
+样例输出：
+今日通行车辆数
+进出车辆数同样可以从 #{parkID}_toRecord 分表中获取，同一辆车进出多次只算一辆车
+以车场 8000666 为例，2020年4月2日通行车辆数可以用以下SQL统计
+select count(DISTINCT plate) 
+from 8000666_torecord 
+where recordTime >= '2020-04-02 00:00:00' and recordTime < '2020-04-03 00:00:00' 
+以车场 8000666 为例,分别统计每天的车辆数也可以用如下SQL统计
+select count(DISTINCT plate) 车辆数,DATE_FORMAT(recordTime,'%Y-%m-%d') statDate 
+from 8000666_torecord 
+GROUP BY statDate;
+样例输出：
+注意：以上两种统计，多辆无牌车也只会算一量车 
+如果需要过滤掉无牌车，可以加上 plate != '无牌' 过滤条件
