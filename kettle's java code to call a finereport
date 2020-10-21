@@ -1,0 +1,55 @@
+import com.alibaba.fastjson.JSON;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+public boolean processRow(StepMetaInterface smi, StepDataInterface sdi) throws KettleException {
+  if (first) {
+    first = false;   
+  }
+
+  Object[] r = getRow();
+  if (r == null) {
+    setOutputDone();
+    return false;
+  }
+
+  String receiver = get(Fields.In, "name").getString(r);
+
+  String content = get(Fields.In, "content").getString(r);
+
+  String title = "ceshi";
+
+  String noticeid = UUID.randomUUID().toString();
+
+  int receviertype = 1;
+
+  String syscode = "829aa2f3-ab3c-4d1a-8812-4cac30c44291";
+
+  String thumbnailUrl = "";
+
+  String appurl = "http://decision.sunriver.cn:9090/webroot/decision/view/form?viewlet=%25E5%25AE%259A%25E6%2597%25B6%25E6%258E%25A8%25E9%2580%2581%252F%25E6%2588%2590%25E6%259C%25AC%25E7%25B3%25BB%25E7%25BB%259F-%25E6%2588%258E%25E4%25BF%258A%25E9%2592%2589%25E9%2592%2589%25E6%258E%25A8%25E9%2580%2581.frm&op=h5&username="+receiver;
+
+  Map map = new HashMap();
+  map.put("title", title);
+  map.put("noticeid", noticeid);
+  map.put("receiver", receiver);
+  map.put("receviertype", receviertype);
+  map.put("source", "");
+  map.put("syscode", syscode);
+  map.put("thumbnailUrl", thumbnailUrl);
+  map.put("appurl", appurl);
+  map.put("content", content);
+  String jsonp = JSON.toJSONString(map);
+    
+  // It is always safest to call createOutputRow() to ensure that your output row's Object[] is large
+  // enough to handle any new fields you are creating in this step.
+  Object[] outputRow = createOutputRow(r, data.outputRowMeta.size());
+  get(Fields.Out, "jsonp").setValue(outputRow, jsonp);
+  
+
+  // Send the row on to the next step.
+  putRow(data.outputRowMeta, outputRow);
+
+  return true;
+}
