@@ -1,0 +1,58 @@
+select node.requestid processid,
+       node.jssj receivetime,
+       extract(day from(node.czsj - node.jssj)) * 24 * 60 * 60 +
+       extract(hour from(node.czsj - node.jssj)) * 60 * 60 +
+       extract(minute from(node.czsj - node.jssj)) * 60 +
+       extract(second from(node.czsj - node.jssj)) jiedianhaoshi, --每个节点的耗时
+       node.companyname spgs,
+       node.departmentname sprbm,
+       node.lastname operator,
+       workcode usercode,
+       node.seclevel,
+       eu.post_level_name,
+       node.typename,
+       node.workflowname
+  from dwd_oa_flow node
+  left join (select nodeid, nodetype, nodename from dwd_oa_flownode) e
+    on e.nodeid = node.nodeid
+  left join (select external_user, post_level_name
+               from dwd_ehr_user
+              where in_use = 1
+                and post_stru_id = 1) eu
+    on eu.external_user = node.workcode
+ where e.nodetype = 1
+      --AND E.NODENAME <> '申请人确认'
+      --AND E.NODENAME <> '转发提交'
+   and node.czsj is not null
+   and node.status <> '强制归档'
+   and node.status <> '不同意'
+   and node.status <> '退回'
+   and node.workflowname <> '运维工单'
+   and node.workflowname <> '文件传阅'
+      --日常工作只统计事项审批表
+   and not exists (select 1
+          from dwd_oa_flow
+         where typename = '日常工作'
+           and workflowname <> '事项审批表'
+           and workflowid = node.workflowid)
+   and node.typename <> '作废单据'
+   and node.workflowname not IN ('周例会纪要上报(上海)','运营周报上报(上海)', '战略合作、集中采购', '工程量清单及控制价（项目公司）')
+   and node.loginid is not null
+   and node.workflowname not like '%未打卡%'
+   and node.workflowname not like '%IT服务%'
+      --去掉转发提交节点
+      --加上这个条件后，sql执行非常慢
+   and exists (select 1
+          from dwd_oa_flowlog
+         where requestid = node.requestid
+           and nodeid = node.nodeid
+           and operator = node.operatorid
+           and logtype <> 't'
+           and logtype <> '9'
+           and logtype <> '7')
+           
+           /*
+           and node.companyname like '岳阳祥源'
+           and node.lastname = '左烨'
+            AND node.jssj >= TO_DATE('2020-11-01 00:00:00', 'yyyy-mm-dd hh24:mi:ss')
+            AND node.jssj <= TO_DATE('2020-11-30 00:00:00', 'yyyy-mm-dd hh24:mi:ss')*/
